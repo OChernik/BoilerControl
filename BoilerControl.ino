@@ -5,19 +5,19 @@
 //***********************************************************************************************
 // Константы и дефайны
 //***********************************************************************************************
-const char* ssid = "GiganetGuest";         // wifi Login
-const char* password = "SatnetGuest";      // wifi Password
-const char* mqttLogin = "u_4S7N69";        // mqtt Login
-const char* mqttPass = "pFeWV5ph";         // mqtt Password
+const char* ssid = "*****";         // wifi Login
+const char* password = "*****";      // wifi Password
+const char* mqttLogin = "*****";        // mqtt Login
+const char* mqttPass = "*****";         // mqtt Password
 
-const char* hubPrefix = "ChernikDevices";  // GyverHub hubPrefix
-const char* hubClientID = "Father";        // GyverHub Client ID
-const char* OpenMonKey = "0RtiY0";         // Open Monitoring Key
-const char* otaPass = "fragMent";          // OTA Password
-#define BOT_TOKEN "7715166622:AAEZu_H9Z3IAOHoDdVfG0B1d4FPSv5PUzrU"  // Telegram bot token
-// Олег 957232331 Надя 787550075 Настя 1463664741 Виктор Лючков 5166703814 Андрей Фомичев 1396079980
-#define CHAT_ID "957232331,1396079980"                
-#define OLEG_ID "957232331"                // кому разрешено обновлять прошивку в боте
+const char* hubPrefix = "*****";  // GyverHub hubPrefix
+const char* hubClientID = "*****";        // GyverHub Client ID
+const char* OpenMonKey = "*****";         // Open Monitoring Key
+const char* otaPass = "*****";          // OTA Password
+#define BOT_TOKEN "*******"  // Telegram bot token
+// 
+#define CHAT_ID "****,****"                
+#define OLEG_ID "****"                // кому разрешено обновлять прошивку в боте
 
 //Необходимо выбрать, какой используется датчик температуры и влажности и оставить только одну строку. Другие строки должны быть закомментированы.
 //#define USE_SHT41                           //использовать датчик Sensirion SHT41
