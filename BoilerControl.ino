@@ -14,17 +14,13 @@ const char* hubPrefix = "*****";  // GyverHub hubPrefix
 const char* hubClientID = "*****";        // GyverHub Client ID
 const char* OpenMonKey = "*****";         // Open Monitoring Key
 const char* otaPass = "*****";          // OTA Password
-#define BOT_TOKEN "*******"  // Telegram bot token
-// 
-#define CHAT_ID "****,****"                
-#define OLEG_ID "****"                // кому разрешено обновлять прошивку в боте
+#define BOT_TOKEN "*******"            // Telegram bot token
+#define ADMIN_ID "****"                // кому разрешено обновлять прошивку в боте
 
 //***********************************************************************************************
 // Константы и дефайны
 //***********************************************************************************************
-
-//Необходимо выбрать, какой используется датчик температуры и влажности и оставить только одну строку. Другие строки должны быть закомментированы.
-//#define USE_SHT41                           //использовать датчик Sensirion SHT41
+//#define USE_SHT41                         //использовать датчик Sensirion SHT41
 #define USE_SHT31                           //использовать датчик Sensirion SHT31
 
 #ifdef USE_SHT31                    // если используется датчик SHT31
@@ -57,9 +53,9 @@ SensirionI2cSht4x sht4x;           // создание объекта датчи
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <Wire.h>
-#include <ArduinoOTA.h>         //бибилотека ОТА обновления по WiFi 
-#include <ESPmDNS.h>            // нужно для работы бибилиотеки ArduinoOTA.h
-#include <WiFiUdp.h>            // нужно для работы бибилиотеки ArduinoOTA.h
+// #include <ArduinoOTA.h>         //бибилотека ОТА обновления по WiFi 
+// #include <ESPmDNS.h>            // нужно для работы бибилиотеки ArduinoOTA.h
+// #include <WiFiUdp.h>            // нужно для работы бибилиотеки ArduinoOTA.h
 #include <GyverOLED.h>          //библиотека дисплея 
 #include <GyverDS18.h>          // библиотека датчика температуры DS18B20
 #include <Arduino.h>
@@ -67,6 +63,7 @@ SensirionI2cSht4x sht4x;           // создание объекта датчи
 #include <GyverHub.h>           // GyverHub 
 #include <FastBot.h>            // библиотека управления телеграм-ботом
 #include <FileData.h>           // для сохранения переменных в памяти ESP32 вместо EEPROM
+#include <PairsFile.h>          // pairsfile - автоматически сохраняет базу данных в файл
 #include <LittleFS.h>           // для сохранения переменных в памяти ESP32 вместо EEPROM
 
 struct Data {                  // структура для хранения настроек в памяти ESP32
@@ -91,8 +88,9 @@ TimerMs heat4xTmr(heat4xPeriod, 1, 0);    // создаем объект heat4xT
 TimerMs checkWifiTmr(checkWifiPeriod, 1, 0);   // создаем объект checkWifiTmr таймера TimerMs с периодом checkWifiPeriod
 TimerMs sensorReadTmr(sensorReadPeriod, 1, 0); // создаем объект sensorReadTmr таймера TimerMs с периодом sensorReadPeriod
 TimerMs botAlarmTmr(botAlarmPeriod, 1, 0);     // создаем объект botAlarmTmr таймера TimerMs с периодом botAlarmPeriod
-GyverHub hub;                                  // создаем объект GyverHub
-FastBot bot(BOT_TOKEN);                        // создаем объект FastBot
+GyverHub hub;                                   // создаем объект GyverHub
+FastBot bot(BOT_TOKEN);                         // создаем объект FastBot
+PairsFile dataId(&LittleFS, "/data.dat", 3000); // создаем объект PairsFile для хранения пар имя - телеграм ID
 
 //*********************************************************************************************************************
 // Переменные
@@ -108,6 +106,11 @@ uint32_t openMonTmr = 0;    // переменная таймера отправ�
 uint32_t narodMonTmr = 0;   // переменная таймера отсылки данных на сервер NarodMon
 bool heatFlag = 0;          // флаг нагрева датчика
 bool oledFlag = 0;          // флаг состояния инверсии дисплея
+String name;     // ключ вводимой/удаляемой пары
+String value;    // CHAT_ID вводимой/удаляемой пары
+String chatId;   // строка, содержащая все разрешенные CHAT_ID 
+bool chatIdChanged = 0;
+
 //*********************************************************************************************************
 // Декларация функций
 //*********************************************************************************************************
@@ -115,6 +118,7 @@ void initWiFi();
 void newMsg(FB_msg& msg);
 void showScreen();
 void sendToOpenMon();
+void chatIdRefresh();
 
 //*********************************************************************************************************
 // билдер GyverHub
@@ -145,6 +149,35 @@ void build(gh::Builder& b) {
     if (b.Switch(&myData.alarmFlag).label("Отслеживание тревог").click()) data.update();
     b.endRow();
   } 
+
+  // поля ввода имени и телеграм ID 
+  if (b.beginRow()) {
+    b.Input(&name).label(F("Name")).size(2);
+    b.Input(&value).label(F("Value")).size(3);
+    b.endRow();
+  } // end if
+
+  // кнопки сохранения и удаления пар имя-телеграм ID
+  if (b.beginRow()) {
+    if (b.Button().label(F("Save")).size(1).click()) {
+      dataId.set(name, value);
+      chatIdChanged = 1;
+    } 
+    if (b.Button().label(F("Del")).size(1).click()) {
+      dataId.remove(name);
+      chatIdChanged = 1;
+    }      
+    b.endRow();
+  } // end if
+
+  // выведем содержимое базы данных как текст
+  b.Text_("pairs", dataId);
+  // выведем содержимое chat_id как текст
+  b.Text_("chatId", chatId);
+
+  // обновить текст при действиях на странице
+  if (b.changed()) hub.update("pairs").value(dataId);
+
 }  // end void build()
 
 //**********************************************************************************************************************
@@ -186,44 +219,47 @@ void setup() {
   initWiFi();                   // установили соединение WiFi
 
  // библиотека ArduinoOTA организует все нужное для ОТА прошивки
-  ArduinoOTA
-    .onStart([]() {
-      String type;
-      if (ArduinoOTA.getCommand() == U_FLASH)
-        type = "sketch";
-      else  // U_SPIFFS
-        type = "filesystem";
+  // ArduinoOTA
+  //   .onStart([]() {
+  //     String type;
+  //     if (ArduinoOTA.getCommand() == U_FLASH)
+  //       type = "sketch";
+  //     else  // U_SPIFFS
+  //       type = "filesystem";
 
-      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-      Serial.println("Start updating " + type);
-    })
-    .onEnd([]() {
-      Serial.println("\nEnd");
-    })
-    .onProgress([](unsigned int progress, unsigned int total) {
-      Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-    })
-    .onError([](ota_error_t error) {
-      Serial.printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-      else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    });
+  //     // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+  //     Serial.println("Start updating " + type);
+  //   })
+  //   .onEnd([]() {
+  //     Serial.println("\nEnd");
+  //   })
+  //   .onProgress([](unsigned int progress, unsigned int total) {
+  //     Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  //   })
+  //   .onError([](ota_error_t error) {
+  //     Serial.printf("Error[%u]: ", error);
+  //     if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+  //     else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+  //     else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+  //     else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+  //     else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  //   });
 
-  ArduinoOTA.setHostname("ESP32_Urozhaynaya");
-  ArduinoOTA.setPassword(otaPass);
-  ArduinoOTA.begin();
+  // ArduinoOTA.setHostname("ESP32_Urozhaynaya");
+  // ArduinoOTA.setPassword(otaPass);
+  // ArduinoOTA.begin();
 
   hub.mqtt.config("m6.wqtt.ru", 17108, mqttLogin, mqttPass);  // подключаем платный защищенный MQTT сервис
   // hub.mqtt.config(F("test.mosquitto.org"), 1883);          // подключаем бесплатный незащищенный MQTT сервис
   hub.config(hubPrefix, F("Urozhaynaya"), F("f015"));
   hub.onBuild(build);
   hub.begin();
+
+  dataId.begin();  // запустить и прочитать базу из файла
+  chatIdRefresh(); // сформировать начальное значение chatId
  
-  bot.setChatID(CHAT_ID);      // задаем  CHAT_ID бота
-  bot.setPeriod(5000);         // период опроса в мс (по умолч. 3500)
+  bot.setChatID(chatId);       // задаем  chatId бота
+  bot.setPeriod(4000);         // период опроса в мс (по умолч. 3500)
   bot.attach(newMsg);          // подключаем функцию-обработчик сообщений  
   bot.showMenu("Обзор \t Стоп тревог \t Старт тревог"); // показываем меню бота с сообщением
 
@@ -236,13 +272,25 @@ void loop() {
 
   esp_task_wdt_reset();  // сбрасываем Watch Dog Timer чтобы не прошла перезагрузка  
   
-  ArduinoOTA.handle();  // Включаем поддержку ОТА
+  // ArduinoOTA.handle();  // Включаем поддержку ОТА
 
-  data.tick();  // сохранение настроек во Флеш памяти по таймауту
+  data.tick();     // сохранение настроек во Флеш памяти по таймауту
+
+  dataId.tick();   // файл с парами имя - телеграм ID сам обновится по таймауту
 
   bot.tick();   // тикаем для работы телеграм бота
 
   hub.tick();                  // тикаем для работы конструктора интерфейса
+
+  // если требуется изменить ПУ и обновить chat_id
+  if (chatIdChanged) {
+    chatIdChanged = 0;
+    chatIdRefresh();
+    hub.sendUpdate("pairs"); // обновляем текстовое поле со значением пар
+    hub.sendUpdate("chatId"); // обновляем текстовое поле со значением chatId
+    bot.setChatID(chatId);      // задаем  chatId бота
+  }
+
   static gh::Timer tmr(2000);  // период 2 секунды  
   if (tmr) {                   // если прошел период
     hub.sendUpdate("TempOut"); // обновляем значение температуры
@@ -313,7 +361,7 @@ void loop() {
     String buf;
     (buf = "Т батареи " + String(tempBat) + "\n");
     (buf += "ниже заданной " + String(myData.tempBatBorder) + " !\n");
-    bot.sendMessage(buf, CHAT_ID);  // отправили сообщение по списку
+    bot.sendMessage(buf, chatId);  // отправили сообщение по списку
   }
 
     // если температура воздуха ниже уставки, высылаем сообщение в Телеграм
@@ -321,7 +369,7 @@ void loop() {
     String buf;
     (buf = "Т воздуха " + String(tempOut) + "\n");
     (buf += "ниже заданной " + String(myData.tempOutBorder) + " !\n");
-    bot.sendMessage(buf, CHAT_ID);  // отправили сообщение по списку
+    bot.sendMessage(buf, chatId);  // отправили сообщение по списку
   }
  
   // Если пришло время очередной отправки на open-monitoring.online и прошло заданное время с момента последнего нагрева датчика 
