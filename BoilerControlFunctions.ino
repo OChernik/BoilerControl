@@ -4,7 +4,7 @@
 void newMsg(FB_msg& msg) {
 
   String msgID = msg.chatID;  // сохраняем chatID запроса, чтобы отправлять ответы только запросившему
-  // разрешить обновление прошивки для Олега
+  // разрешить обновление прошивки для Админа
   if (msg.OTA && (msg.chatID == ADMIN_ID)) bot.update();  // telegram update 
   
   if (msg.text == "/status" || msg.text == "Обзор") {
@@ -13,21 +13,19 @@ void newMsg(FB_msg& msg) {
     (buf += "Т воздуха " + String(tempOut) + "\n");
     (buf += "Rh воздуха " + String(humidity) + "\n");
     (buf += "RSSI  " + String(rssi) + "\n");
-    (buf += "Уставка Тбат " + String(myData.tempBatBorder) + "\n");
-    (buf += "Уставка Твозд " + String(myData.tempOutBorder) + "\n");
-    (myData.alarmFlag) ? (buf += "Тревоги ON\n") : (buf += "Тревоги OFF\n");    
+    (buf += "Уставка Тбат " + String(data.get("tempBatBorder")) + "\n");
+    (buf += "Уставка Твозд " + String(data.get("tempOutBorder")) + "\n");
+    (data.get("alarmFlag")) ? (buf += "Тревоги ON\n") : (buf += "Тревоги OFF\n");    
     bot.sendMessage(buf, msgID);  // отправили сообщение
   }
 
   if (msg.text == "/alarm_stop" || msg.text == "Стоп тревог"){
-    myData.alarmFlag = 0;
-    data.update();
+    data.set("alarmFlag", 0);
     bot.sendMessage("Отслеживание тревог прекращено", chatId);  // отправили сообщение
   }
 
   if (msg.text == "/alarm_start" || msg.text == "Старт тревог"){
-    myData.alarmFlag = 1;
-    data.update();
+    data.set("alarmFlag", 1);
     bot.sendMessage("Начато отслеживание тревог", chatId);  // отправили сообщение
   }
 }  // end void newMsg
