@@ -62,35 +62,29 @@ SensirionI2cSht4x sht4x;           // создание объекта датчи
 #include <TimerMs.h>            // библиотека таймера
 #include <GyverHub.h>           // GyverHub 
 #include <FastBot.h>            // библиотека управления телеграм-ботом
-#include <FileData.h>           // для сохранения переменных в памяти ESP32 вместо EEPROM
 #include <PairsFile.h>          // pairsfile - автоматически сохраняет базу данных в файл
-#include <LittleFS.h>           // для сохранения переменных в памяти ESP32 вместо EEPROM
-
-struct Data {                  // структура для хранения настроек в памяти ESP32
-  float humCorrection = 0;     // поправка влажности датчика 
-  uint8_t tempBatBorder = 30;  // уставка измеренного значения температуры батареи
-  uint8_t tempOutBorder = 15;  // уставка измеренного значения температуры воздуха
-  bool alarmFlag = 1;          // будет ли бот реагировать на нарушение уставок  
-};
-Data myData;  // объявляем структуру myData с типом  Data
-// создание объекта data библиотеки FileData для сохранения настроек на флеше ESP32
-FileData data(&LittleFS, "/myData.dat", 136, &myData, sizeof(myData));
 
 //******************************************************************************************************************
 // Объекты библиотек
 //******************************************************************************************************************
-GyverOLED<SSH1106_128x64> oled;           // создание объекта экрана SSH1106 1,3''
-GyverDS18Single dsTemp(dsPin);            // создаем объект датчика температуры DS18B20
-HTTPClient http;                          // создаем объект http библиотеки HTTPClient
-WiFiClient client;                        // создаем объект client библиотеки WiFiClient
-TimerMs oledTmr(oledInvertPeriod, 1, 0);  // создаем объект oledTmr таймера TimerMs с периодом oledInvertPeriod
-TimerMs heat4xTmr(heat4xPeriod, 1, 0);    // создаем объект heat4xTmr таймера TimerMs с периодом heat4xPeriod
-TimerMs checkWifiTmr(checkWifiPeriod, 1, 0);   // создаем объект checkWifiTmr таймера TimerMs с периодом checkWifiPeriod
-TimerMs sensorReadTmr(sensorReadPeriod, 1, 0); // создаем объект sensorReadTmr таймера TimerMs с периодом sensorReadPeriod
-TimerMs botAlarmTmr(botAlarmPeriod, 1, 0);     // создаем объект botAlarmTmr таймера TimerMs с периодом botAlarmPeriod
+GyverOLED<SSH1106_128x64> oled;                 // создание объекта экрана SSH1106 1,3''
+GyverDS18Single dsTemp(dsPin);                  // создаем объект датчика температуры DS18B20
+HTTPClient http;                                // создаем объект http библиотеки HTTPClient
+WiFiClient client;                              // создаем объект client библиотеки WiFiClient
+TimerMs oledTmr(oledInvertPeriod, 1, 0);        // создаем объект oledTmr таймера TimerMs с периодом oledInvertPeriod
+TimerMs heat4xTmr(heat4xPeriod, 1, 0);          // создаем объект heat4xTmr таймера TimerMs с периодом heat4xPeriod
+TimerMs checkWifiTmr(checkWifiPeriod, 1, 0);    // создаем объект checkWifiTmr таймера TimerMs с периодом checkWifiPeriod
+TimerMs sensorReadTmr(sensorReadPeriod, 1, 0);  // создаем объект sensorReadTmr таймера TimerMs с периодом sensorReadPeriod
+TimerMs botAlarmTmr(botAlarmPeriod, 1, 0);      // создаем объект botAlarmTmr таймера TimerMs с периодом botAlarmPeriod
 GyverHub hub;                                   // создаем объект GyverHub
 FastBot bot(BOT_TOKEN);                         // создаем объект FastBot
-PairsFile dataId(&LittleFS, "/data.dat", 3000); // создаем объект PairsFile для хранения пар имя - телеграм ID
+PairsFile dataId(&GH_FS, "/dataId.dat", 3000);  // создаем объект dataId библиотки PairsFile для хранения пар имя - телеграм ID
+PairsFile data(&GH_FS, "/data.dat", 3000);      // создаем объект data библиотеки PairsFile для хранения пар с настройками 
+// настройки, сохраняемые в объекте data в формате "ключ":значение
+// "tempBatBorder":30  уставка температуры батареи
+// "tempOutBorder":10  уставка температуры воздуха
+// "humCorrection":0   поправка влажности
+// "alarmFlag":0       флаг необходимости отправлять аварийные сообщения
 
 //*********************************************************************************************************************
 // Переменные
@@ -109,7 +103,7 @@ bool oledFlag = 0;          // флаг состояния инверсии ди
 String name;     // ключ вводимой/удаляемой пары
 String value;    // CHAT_ID вводимой/удаляемой пары
 String chatId;   // строка, содержащая все разрешенные CHAT_ID 
-bool chatIdChanged = 0;
+bool chatIdChanged = 0;     // флаг необходимости обновить перечень Телеграм ID
 
 //*********************************************************************************************************
 // Декларация функций
@@ -137,16 +131,16 @@ void build(gh::Builder& b) {
    b.Label_("Rssi", rssi).label("RSSI").color(gh::Colors::Aqua);
    b.endRow();  
   }
-  // добавляем спиннеры с уставкой температуры
+  // добавляем спиннеры с уставками температуры. Уставки сохраняются в парах data в соответствующих ключах
   if (b.beginRow()) {
-    if (b.Spinner(&myData.tempBatBorder).range(0, 50, 1).label("Уставка Т батареи").click()) data.update();
-    if (b.Spinner(&myData.tempOutBorder).range(0, 25, 1).label("Уставка Т воздуха").click()) data.update();
+    b.Spinner_("tempBatBorder", &data).range(0, 50, 1).label("Уставка Т батареи");
+    b.Spinner_("tempOutBorder", &data).range(0, 25, 1).label("Уставка Т воздуха");
     b.endRow();
   }
-  // добавляем спиннер с поправкой влажности и флаг тревог
+  // добавляем спиннеры с поправкой влажности и флагом тревог. Параметры сохраняются в парах data в соответствующих ключах 
   if (b.beginRow()) {
-    if (b.Spinner(&myData.humCorrection).range(-10, 10, 1).label("Поправка влажности").click()) data.update();
-    if (b.Switch(&myData.alarmFlag).label("Отслеживание тревог").click()) data.update();
+    b.Spinner_("humCorrection", &data).range(-10, 10, 1).label("Поправка влажности");
+    b.Switch_("alarmFlag", &data).label("Отслеживание тревог");
     b.endRow();
   } 
 
@@ -185,16 +179,22 @@ void build(gh::Builder& b) {
 //**********************************************************************************************************************
 void setup() {
 
-  pinMode(dsPin, INPUT);                      // назначаем dsPin, как вход  
+  pinMode(dsPin, INPUT);                   // назначаем dsPin, как вход  
 
-  esp_task_wdt_init(WDT_TIMEOUT, true);       //enable panic so ESP32 restarts
-  esp_task_wdt_add(NULL);                     //add current thread to WDT watch
+  esp_task_wdt_init(WDT_TIMEOUT, true);    //enable panic so ESP32 restarts
+  esp_task_wdt_add(NULL);                  //add current thread to WDT watch
 
-  LittleFS.begin();                          // инициализация файловой системы на флеше для записи настроек
-  FDstat_t stat = data.read();               // считываем данные настроек из флеша. При первом запуске во флеш пишутся данные из структуры
+  // LittleFS.begin();                          // инициализация файловой системы на флеше для записи настроек
+  // FDstat_t stat = data.read();               // считываем данные настроек из флеша. При первом запуске во флеш пишутся данные из структуры
+  
+  data.begin();                            // запустить и прочитать базу с настройками из файла
+  if (data.get("tempBatBorder") = 0) data.set("tempBatBorder", 30);  // запись начального значения уставки температуры батареи
+  if (data.get("tempOutBorder") = 0) data.set("tempOutBorder", 15);  // запись начального значения уставки температуры воздуха
+  
+  dataId.begin();                          // запустить и прочитать базу с парами имя - телеграм ID из файла
   
   Serial.begin(115200);
-  Wire.begin();                             // SensirionI2cSht3x.h and SensirionI2cSht4x.h 
+  Wire.begin();                            // SensirionI2cSht3x.h and SensirionI2cSht4x.h 
 
   #ifdef USE_SHT31                         // если используется датчик SHT31
     sht3x.begin(Wire, SHT31_I2C_ADDR_44);  // SensirionI2cSht3x.h 
@@ -255,8 +255,7 @@ void setup() {
   hub.onBuild(build);
   hub.begin();
 
-  dataId.begin();  // запустить и прочитать базу из файла
-  chatIdRefresh(); // сформировать начальное значение chatId
+  chatIdRefresh();             // сформировать начальное значение chatId
  
   bot.setChatID(chatId);       // задаем  chatId бота
   bot.setPeriod(4000);         // период опроса в мс (по умолч. 3500)
@@ -274,21 +273,21 @@ void loop() {
   
   // ArduinoOTA.handle();  // Включаем поддержку ОТА
 
-  data.tick();     // сохранение настроек во Флеш памяти по таймауту
+  data.tick();           // файл с парами ключ - настройка обновится по таймауту
 
-  dataId.tick();   // файл с парами имя - телеграм ID сам обновится по таймауту
+  dataId.tick();         // файл с парами имя - телеграм ID  обновится по таймауту
 
-  bot.tick();   // тикаем для работы телеграм бота
+  bot.tick();            // тикаем для работы телеграм бота
 
-  hub.tick();                  // тикаем для работы конструктора интерфейса
+  hub.tick();            // тикаем для работы конструктора интерфейса
 
   // если требуется изменить ПУ и обновить chat_id
   if (chatIdChanged) {
     chatIdChanged = 0;
     chatIdRefresh();
-    hub.sendUpdate("pairs"); // обновляем текстовое поле со значением пар
-    hub.sendUpdate("chatId"); // обновляем текстовое поле со значением chatId
-    bot.setChatID(chatId);      // задаем  chatId бота
+    hub.sendUpdate("pairs");   // обновляем текстовое поле со значением пар
+    hub.sendUpdate("chatId");  // обновляем текстовое поле со значением chatId
+    bot.setChatID(chatId);     // задаем  chatId бота
   }
 
   static gh::Timer tmr(2000);  // период 2 секунды  
@@ -315,8 +314,8 @@ void loop() {
   // или если пришло время ежесуточного прогрева датчика SHT41
   if (((humidity > heat4xBorder) && heat4xTmr.tick()) || ((millis() - heatTmr) > heatPeriod)) { 
     heatTmr = millis();                                              // сброс таймера на начало нагрева датчика
-    sht4x.activateHighestHeaterPowerLong(tempOut, tempHumidity); // SensirionI2cSht4x.h 
-    humidity = tempHumidity + humCorrection;                         // SensirionI2cSht4x.h
+    sht4x.activateHighestHeaterPowerLong(tempOut, tempHumidity);     // SensirionI2cSht4x.h 
+    humidity = tempHumidity + data.get("humCorrection");             // SensirionI2cSht4x.h
     showScreen();                                                    // вывод показаний датчиков на экран
     delay(1000);                                                     // чтобы успеть увидеть цифры после нагрева    
   } // end If 
@@ -344,7 +343,7 @@ void loop() {
     }
 
     rssi = WiFi.RSSI();
-    humidity = humidity + myData.humCorrection;
+    humidity = humidity + data.get("humCorrection");
     showScreen();                      // вывод показаний датчиков на экран
         
   }  // end if 
@@ -357,18 +356,18 @@ void loop() {
   }
 
   // если температура батареи ниже уставки, высылаем сообщение в Телеграм
-  if((tempBat < myData.tempBatBorder) && botAlarmTmr.tick() && myData.alarmFlag) {
+  if((tempBat < data.get("tempBatBorder")) && botAlarmTmr.tick() && data.get("alarmFlag")) {
     String buf;
     (buf = "Т батареи " + String(tempBat) + "\n");
-    (buf += "ниже заданной " + String(myData.tempBatBorder) + " !\n");
+    (buf += "ниже заданной " + String(data.get("tempBatBorder")) + " !\n");
     bot.sendMessage(buf, chatId);  // отправили сообщение по списку
   }
 
     // если температура воздуха ниже уставки, высылаем сообщение в Телеграм
-  if((tempOut < myData.tempOutBorder) && botAlarmTmr.tick() && myData.alarmFlag) {
+  if((tempOut < data.get("tempOutBorder")) && botAlarmTmr.tick() && data.get("alarmFlag")) {
     String buf;
     (buf = "Т воздуха " + String(tempOut) + "\n");
-    (buf += "ниже заданной " + String(myData.tempOutBorder) + " !\n");
+    (buf += "ниже заданной " + String(data.get("tempOutBorder")) + " !\n");
     bot.sendMessage(buf, chatId);  // отправили сообщение по списку
   }
  
