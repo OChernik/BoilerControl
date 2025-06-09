@@ -356,7 +356,7 @@ void loop() {
   }
 
   // если температура батареи ниже уставки, высылаем сообщение в Телеграм
-  if((tempBat < data.get("tempBatBorder")) && botAlarmTmr.tick() && data.get("alarmFlag")) {
+  if((tempBat < data.get("tempBatBorder")) && botAlarmTmr.tick() && (bool)data.get("alarmFlag")) {
     String buf;
     (buf = "Т батареи " + String(tempBat) + "\n");
     (buf += "ниже заданной " + String(data.get("tempBatBorder")) + " !\n");
@@ -364,7 +364,7 @@ void loop() {
   }
 
     // если температура воздуха ниже уставки, высылаем сообщение в Телеграм
-  if((tempOut < data.get("tempOutBorder")) && botAlarmTmr.tick() && data.get("alarmFlag")) {
+  if((tempOut < data.get("tempOutBorder")) && botAlarmTmr.tick() && (bool)data.get("alarmFlag")) {
     String buf;
     (buf = "Т воздуха " + String(tempOut) + "\n");
     (buf += "ниже заданной " + String(data.get("tempOutBorder")) + " !\n");
