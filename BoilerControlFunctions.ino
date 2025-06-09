@@ -15,7 +15,7 @@ void newMsg(FB_msg& msg) {
     (buf += "RSSI  " + String(rssi) + "\n");
     (buf += "Уставка Тбат " + String(data.get("tempBatBorder")) + "\n");
     (buf += "Уставка Твозд " + String(data.get("tempOutBorder")) + "\n");
-    (data.get("alarmFlag")) ? (buf += "Тревоги ON\n") : (buf += "Тревоги OFF\n");    
+    ((bool)data.get("alarmFlag")) ? (buf += "Тревоги ON\n") : (buf += "Тревоги OFF\n");    
     bot.sendMessage(buf, msgID);  // отправили сообщение
   }
 
