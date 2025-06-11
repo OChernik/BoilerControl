@@ -359,7 +359,9 @@ void loop() {
   if((tempBat < data.get("tempBatBorder")) && botAlarmTmr.tick() && (bool)data.get("alarmFlag")) {
     String buf;
     (buf = "Т батареи " + String(tempBat) + "\n");
-    (buf += "ниже заданной " + String(data.get("tempBatBorder")) + " !\n");
+    // String k = data.get("tempBatBorder");
+    // data.get("tempBatBorder").toString(k);
+    (buf += "ниже заданной " + k + " !\n");
     bot.sendMessage(buf, chatId);  // отправили сообщение по списку
   }
 
